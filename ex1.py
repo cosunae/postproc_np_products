@@ -6,10 +6,12 @@ import matplotlib.pyplot as plt
 import cProfile
 import pstats
 import io
+import time
 from pstats import SortKey
 pr = cProfile.Profile()
 pr.enable()
 
+pc_g = 9.80665
 
 def destagger(u, du):
     du[1:-1, :] += u[2:, :] + u[0:-2, :]
@@ -33,27 +35,41 @@ def fthetav(p, t, qv):
 
     # Reference surface pressure for computation of potential temperature
     p0 = 1.0e5
-    return p0 / p ** pc_rdocp * t * (1.+(pc_rvd_o*qv / (1.-qv)))
+    return (p0 / p) ** pc_rdocp * t * (1.+(pc_rvd_o*qv / (1.-qv)))
 
 
 def brn(dataset):
     pass
 
+def profile():
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
+
 
 if __name__ == '__main__':
 
-    dss = None
-    print("LLLLLL")
+
+    start = time.time()
     index = cfgrib.open_fileindex(
-        'grib_files/cosmo-1e/lfff00000000', index_keys=cfgrib.dataset.INDEX_KEYS + ["time", "step"]+["shortName"])
+        'grib_files/cosmo-1e/lfff00000000', index_keys=cfgrib.dataset.INDEX_KEYS + ["time", "step"]+["shortName", "paramId"])
 
     levels = level_range(index, 't')
-    print("LL", levels)
+
     dss = cfgrib.open_datasets('grib_files/cosmo-1e/lfff00000000',
                                backend_kwargs={'read_keys': ['typeOfLevel', 'gridType'], 'filter_by_keys': {
                                    'typeOfLevel': 'generalVerticalLayer'}})
-    print("DONE LOADING")
     massds = dss[0]
+
+    uds = cfgrib.open_dataset('grib_files/cosmo-1e/lfff00000000',
+                               backend_kwargs={'read_keys': ['cfVarName'], 'filter_by_keys': {
+                                   'cfVarName': 'u'}})
+    vds = cfgrib.open_dataset('grib_files/cosmo-1e/lfff00000000',
+                               backend_kwargs={'read_keys': ['cfVarName'], 'filter_by_keys': {
+                                   'cfVarName': 'v'}})
 
     cds = cfgrib.open_dataset('grib_files/cosmo-1e/lfff00000000c',
                               backend_kwargs={'read_keys': ['typeOfLevel', 'gridType'],
@@ -61,20 +77,14 @@ if __name__ == '__main__':
                                   'typeOfLevel': 'generalVertical'}
                               }
                               )
+    hhl = cds['h'].rename({'generalVertical':'generalVerticalLayer'})
 
-    hsurf_ds = cfgrib.open_datasets('grib_files/cosmo-1e/lfff00000000c',
+    hsurf_ds = cfgrib.open_dataset('grib_files/cosmo-1e/lfff00000000c',
                                     backend_kwargs={'read_keys': [
-                                        'paramId'], 'filter_by_keys': {'paramId': 3008}}
+                                        'shortName'], 'filter_by_keys': {'shortName': 'HSURF'}}
                                     )
-
-    print("IIII", hsurf_ds)
-    print("8888", cds)
-
-    # thetav = None
-    print("KKK", levels, len(levels))
-    print("IO", cds)
-    print("ENDIO")
-    nlevels = int(levels[1]) - int(levels[0])
+    
+    nlevels = int(levels[1]) - int(levels[0])+1
     # for lev in range(nlevels+1):
     #     print("LEV", lev)
     #     thetav_ = fthetav(massds['pres'].isel(generalVerticalLayer=lev), massds['t'].isel(
@@ -83,76 +93,23 @@ if __name__ == '__main__':
     #     thetav = xr.concat(
     #         [thetav, thetav_], dim='generalVerticalLayer') if thetav is not None else thetav_
 
-    thetav = fthetav(massds['pres'], massds['t'], massds['q'])
+    P = massds['pres']
+    T = massds['t']
+    QV = massds['q']
+
+    thetav = fthetav(P, T, QV)
 
     thetav_sum = thetav.isel(generalVerticalLayer=slice(
-        None, None, -1)).cumsum(dim='generalVerticalLayer') / nlevels
+        None, None, -1)).cumsum(dim='generalVerticalLayer') 
 
-    brn = (cds['h'])*(thetav - thetav.isel(generalVerticalLayer=79)) / \
-        ((thetav_sum.isel(generalVerticalLayer=0)/80)
-         * (massds['u']**2 + massds['v']**2))
+    nlevels_xr =xr.DataArray(data=np.arange(nlevels,0,-1), dims=["generalVerticalLayer"])
 
-    print(thetav)
-    # print(dss[0])
-    # for lev in range(*(int(x) for x in levels)):
-    # gds = xr.Dataset()
-    # for lev in range(1, 10):
-    #     print("AAAA", lev)
-    #     ds = cfgrib.open_datasets(
-    #         'grib_files/cosmo-1e/lfff00000000',
-    #         backend_kwargs={'read_keys': ['typeOfLevel', 'gridType'], 'filter_by_keys': {
-    #             'typeOfLevel': 'generalVerticalLayer', 'level': lev}}  # , 'generalVerticalLayer': 1}},
-    #         # chunks={"generalVerticalLayer": 1}
-    #         # , engine='cfgrib')
-    #     )
-    #     massds = ds[0]
+    brn = pc_g* (hhl-hsurf_ds['h'])*(thetav - thetav.isel(generalVerticalLayer=79)) / \
+        ( (thetav_sum/nlevels_xr)*(uds['u']**2 + vds['v']**2))
+    brn.name = "BRN"
 
-    #     thetav(massds, lev, "thetav", gds)
+    brn.isel(generalVerticalLayer=slice(37,80,1)).to_netcdf(path="brn_out.nc")
 
-    #     # print(ds['t'].coords['generalVerticalLayer'])
-    #     if not dss:
-    #         dss = ds
-    #     else:
-    #         dss = xr.concat([dss, ds], dim='generalVerticalLayer')
-    #     # print(rhs)
-    #     # dss = cfgrib.xarray_store.merge_datasets(rhs)
+    end = time.time()
 
-    # print(dss)
-    # massds = dss[0]
-
-    # theta = thetav(massds)
-    # theta = massds
-    # thetasum = theta.isel(generalVerticalLayer=slice(
-    #     None, None, -1)).cumsum(dim='generalVerticalLayer')
-
-    # print(thetasum)
-    # thetasum.isel(generalVerticalLayer=0).plot()
-    # integ = t.sum('generalVerticalLayer')
-    # , backend_kwargs={'filter_by_keys': {'typeOfLevel': 'surface'}})
-
-    # t.isel(generalVerticalLayer=2).plot()
-    # integ.plot()
-    # plt.show()
-    # massv = ds[1]
-    # print(massv.attrs)
-    # print(ds[0].attrs)
-    # print(ds[0])
-    print("******************")
-
-    pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())
-
-    # print(ds[0]['t'].sel(generalVerticalLayer=slice(0, None)))
-    # print(ds.attrs)
-    # print(ds[0].attrs['GRIB_gridType'])
-    # print(dir(massv))
-    # print(ds)
-
-    # print(ds[1])
-
-    # for k in range(0, 80):
-    #     destagger(u[:, :, k], du[:, :, k])
+    print("Time elapsed:", end - start)
