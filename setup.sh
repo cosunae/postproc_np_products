@@ -5,3 +5,5 @@ cosmo_eccodes=`spack location -i  cosmo-eccodes-definitions@2.19.0.7%gcc`
 eccodes=`spack location -i eccodes@2.19.0%gcc`
 
 export GRIB_DEFINITION_PATH=${cosmo_eccodes}/cosmoDefinitions/definitions/:${eccodes}/share/eccodes/definitions/
+export OMPI_MCA_pml="ucx" 
+export OMPI_MCA_osc="ucx"
