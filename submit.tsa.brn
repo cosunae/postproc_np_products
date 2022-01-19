@@ -1,0 +1,26 @@
+#!/bin/bash
+#SBATCH --job-name=testsuite
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=40
+#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-socket=1
+#SBATCH --partition=postproc
+#SBATCH --time=00:30:00
+#SBATCH --output=job.out
+
+
+
+
+# Export env variables
+export OMP_NUM_THREADS=1
+export MALLOC_MMAP_MAX_=0
+export MALLOC_TRIM_THRESHOLD_=536870912
+
+# Set this to avoid segmentation faults
+ulimit -s unlimited
+ulimit -a
+
+python3 brn_dask.py
+python3 brn_dask.py
+python3 brn_dask.py
+
