@@ -12,3 +12,4 @@ conda install -c conda-forge jupyter dask_labextension jupyterlab_code_formatter
 conda install dask-mpi ucx -c conda-forge
 conda install dask-jobqueue -c conda-forge
 conda install ipywidgets -c conda-forge
+~/miniconda3_python3.7/envs/postproc_np_products/bin/python3 -m pip install aquirdturtle_collapsible_headings
