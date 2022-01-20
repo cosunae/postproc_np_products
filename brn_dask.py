@@ -13,8 +13,8 @@ import dask
 
 dask.config.set(scheduler="threads", num_workers=8)
 
-pr = cProfile.Profile()
-pr.enable()
+# pr = cProfile.Profile()
+# pr.enable()
 
 pc_g = 9.80665
 
@@ -69,7 +69,30 @@ def fbrn(p, t, qv, u, v, hhl, hsurf):
     return brn
 
 
-def profile():
+def fbrn2(p, t, qv, u, v, hhl, hsurf):
+    thetav = fthetav(p, t, qv)
+    # thetav.data.visualize(filename='thetav.svg')
+
+    # thetav_sum = thetav.isel(generalVerticalLayer=slice(None, None, -1)).cumsum(
+    #     dim="generalVerticalLayer"
+    # )
+
+    # dask.delayed(thetav_sum.data).visualize(filename='thetasum.svg')
+
+    # nlevels_xr = xr.DataArray(
+    #     data=np.arange(nlevels, 0, -1), dims=["generalVerticalLayer"]
+    # )
+
+    brn = (
+        pc_g
+        * (hhl - hsurf)
+        * (thetav - thetav.isel(generalVerticalLayer=79))
+        / (u ** 2 + v ** 2)
+    )
+    return brn
+
+
+def profile(pr):
     pr.disable()
     s = io.StringIO()
     sortby = SortKey.CUMULATIVE
@@ -149,7 +172,8 @@ def load_data(fields, chunk_size=10):
 
 if __name__ == "__main__":
 
-    scheduler = "distributed"
+    scheduler = "localcluster"
+    cluster = None
     if scheduler == "distributed":
         from dask.distributed import Client
 
@@ -159,9 +183,9 @@ if __name__ == "__main__":
             queue="postproc",
             cores=2,
             memory="24GB",
-            n_workers=6,
             job_extra=["--exclusive"],
         )
+        cluster.scale(jobs=4)
 
         client = None
         client = Client(cluster)
@@ -173,7 +197,7 @@ if __name__ == "__main__":
     elif scheduler == "threads":
         from multiprocessing.pool import ThreadPool
 
-        dask.config.set(pool=ThreadPool(16))
+        dask.config.set(pool=ThreadPool(1))
         # dask.config.set(scheduler="threads")
     elif scheduler == "synchronous":
         dask.config.set(
@@ -193,33 +217,67 @@ if __name__ == "__main__":
         + ["shortName", "paramId"],
     )
 
+    if cluster:
+        while cluster.status != dask.distributed.core.Status.running:
+            time.sleep(1)
+        print("CLUSTER ALLOCATED", cluster.status, cluster.workers)
+
+        import sys
+
+        sys.stdin.read(1)
+
     start = time.time()
 
     levels = level_range(index, "T")
     nlevels = int(levels[1]) - int(levels[0]) + 1
 
     start = time.time()
-    # with dask.distributed.get_task_stream(plot='save', filename="task-stream.html") as ts:
+    with dask.distributed.get_task_stream(
+        plot="save", filename="task-stream_localc_p16_2t_chunk4.html"
+    ) as ts:
+        # pr = cProfile.Profile()
+        # pr.enable()
+        p, t, qv, hhl, hsurf, u, v = load_data([], chunk_size=4)
+        # profile(pr)
 
-    p, t, qv, hhl, hsurf, u, v = load_data([], chunk_size=2)
+        end = time.time()
+        print("Time elapsed (load data):", end - start)
+        start = time.time()
+        brn = fbrn(p, t, qv, u, v, hhl, hsurf)
+        brn.to_netcdf(path="brn_out.nc")
 
+        # client.profile(filename="dask-profile.html")
+        # history = ts.data
+        end = time.time()
+        print("Time elapsed (compute and store):", end - start)
+
+        start = time.time()
+        brn = fbrn(p, t, qv, u, v, hhl, hsurf)
+        brn.compute()
+
+        # client.profile(filename="dask-profile.html")
+        # history = ts.data
+        end = time.time()
+        print("Time elapsed (compute):", end - start)
+
+        # with dask.distributed.get_task_stream(
+        #     plot="save", filename="task-stream.html"
+        # ) as ts:
+        start = time.time()
+        res = [
+            xr.Dataset(data_vars={"thetav": fthetav(p * (1 + i * 0.01), t, qv)})
+            for i in range(10)
+        ]
+        paths = ["thetav_" + str(i) + ".nc" for i in range(10)]
+
+        xr.save_mfdataset(res, paths=paths, format="NETCDF4")
+
+    # compute(res)
+    # thetav = fthetav(p, t, qv)
+    # thetav.to_netcdf(path="thetav.nc")
     end = time.time()
-    print("Time elapsed (load data):", end - start)
-    start = time.time()
-    brn = fbrn(p, t, qv, u, v, hhl, hsurf)
-    brn.to_netcdf(path="brn_out.nc")
+    print("Time elapsed (thetav):", end - start)
 
-    # client.profile(filename="dask-profile.html")
-    # history = ts.data
-    end = time.time()
-    print("Time elapsed (compute and store):", end - start)
+    # import sys
 
-    start = time.time()
-    brn = fbrn(p, t, qv, u, v, hhl, hsurf)
-    brn.compute()
-
-    # client.profile(filename="dask-profile.html")
-    # history = ts.data
-    end = time.time()
-
-    print("Time elapsed (compute):", end - start)
+    # sys.stdin.read(1)
