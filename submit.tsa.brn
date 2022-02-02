@@ -20,7 +20,7 @@ export MALLOC_TRIM_THRESHOLD_=536870912
 ulimit -s unlimited
 ulimit -a
 
-python3 brn_dask.py
-python3 brn_dask.py
-python3 brn_dask.py
+python3 thetavi.py
+#python3 brn_dask.py
+#python3 brn_dask.py
 
