@@ -217,7 +217,14 @@ if __name__ == "__main__":
         + ["shortName", "paramId"],
     )
 
-    start = time.time()
+    if cluster:
+        while cluster.status != dask.distributed.core.Status.running:
+            time.sleep(1)
+        print("CLUSTER ALLOCATED", cluster.status, cluster.workers)
+
+        import sys
+
+        sys.stdin.read(1)
 
     levels = level_range(index, "T")
     nlevels = int(levels[1]) - int(levels[0]) + 1
@@ -228,7 +235,7 @@ if __name__ == "__main__":
     # ) as ts:
     # pr = cProfile.Profile()
     # pr.enable()
-    p, t, qv, hhl, hsurf, u, v = load_data([], chunk_size=4)
+    p, t, qv, hhl, hsurf, u, v = load_data([], chunk_size=10)
     # profile(pr)
 
     end = time.time()
