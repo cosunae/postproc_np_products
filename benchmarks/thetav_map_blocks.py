@@ -242,8 +242,6 @@ if __name__ == "__main__":
             job_extra=["--exclusive"],
         )
         cluster.scale(jobs=2)
-
-        client = None
         client = Client(cluster)
     elif scheduler == "localcluster":
         from dask.distributed import Client, LocalCluster
