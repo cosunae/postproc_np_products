@@ -35,7 +35,7 @@ def level_range(index, short_name):
 
 
 def fthetavi(p, t, qv):
-    return [fthetav(p * (1 + i * 0.01), t, qv) for i in range(10)]
+    return [fthetav(p * (1 + i * 0.01), t, qv) for i in range(4)]
 
 
 def fthetav(p, t, qv):
@@ -228,7 +228,7 @@ def map_blocks(func, *arrs, nout=None, pure=False):
 
 if __name__ == "__main__":
 
-    scheduler = "distributed"
+    scheduler = "synchronous"
     cluster = None
     if scheduler == "distributed":
         from dask.distributed import Client
@@ -314,9 +314,14 @@ if __name__ == "__main__":
     # with dask.distributed.get_task_stream(
     #     plot="save", filename="task-stream_dist_c16_2n_chunk4_map_block.html"
     # ) as ts:
+    # from dask.diagnostics import Profiler, ResourceProfiler, CacheProfiler, visualize
+
+    # with Profiler() as prof, ResourceProfiler(
+    #     dt=0.25
+    # ) as rprof, CacheProfiler() as cprof:
     start = time.time()
 
-    res = map_blocks(fthetavi, p.data, t.data, qv.data, nout=10, pure=True)
+    res = map_blocks(fthetavi, p.data, t.data, qv.data, nout=4, pure=True)
 
     res_ds = [
         xr.Dataset(data_vars={"thetav" + str(i): (p.dims, block)})
@@ -335,4 +340,5 @@ if __name__ == "__main__":
 
     end = time.time()
 
+    # visualize([prof, rprof, cprof])
     print("Time elapsed (thetav):", end - start)
