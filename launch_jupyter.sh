@@ -1,2 +1,2 @@
 source setup.sh
-jupyter lab notebook/satellite_prod.ipynb --port 8899
+jupyter lab notebook/brn_simple.ipynb --port 8899
